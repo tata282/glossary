@@ -1,12 +1,18 @@
-// ========== 物流关务术语库 - 纯静态版（无后端依赖） ==========
+// ========== 物流关务术语库 - 支持手机号登录同步 ==========
 
 (function () {
   'use strict';
 
   // ========== 常量与配置 ==========
+  var API_BASE = '';  // 同源，无需前缀
   var PAGE_SIZE = 15;
   var STORAGE_TERMS = 'glossary_terms';
   var STORAGE_CATEGORIES = 'glossary_categories';
+
+  // ========== 认证状态 ==========
+  var authToken = localStorage.getItem('glossary_token') || '';
+  var currentUser = localStorage.getItem('glossary_user') || '';
+  var displayName = localStorage.getItem('glossary_displayName') || '';
 
   // ========== 初始示例数据 ==========
   var SAMPLE_CATEGORIES = ['运输方式', '单证', '贸易术语', '海关', '仓储', '保险', '费用'];
@@ -47,32 +53,79 @@
     editingTermId: null
   };
 
-  // ========== 数据持久化（纯 localStorage） ==========
+  // ========== API 请求 ==========
+  function apiRequest(method, path, body) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open(method, API_BASE + path);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      if (authToken) { xhr.setRequestHeader('Authorization', 'Bearer ' + authToken); }
+      xhr.onload = function () {
+        try {
+          var data = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) { resolve(data); }
+          else { reject(data); }
+        } catch (e) { reject({ error: '请求失败' }); }
+      };
+      xhr.onerror = function () { reject({ error: '网络错误' }); };
+      xhr.send(body ? JSON.stringify(body) : null);
+    });
+  }
+
+  // ========== 数据持久化（服务端优先，离线回退 localStorage） ==========
   function loadData() {
+    if (authToken) {
+      // 已登录：从服务端加载
+      apiRequest('GET', '/api/terms').then(function (data) {
+        state.terms = data.terms || [];
+        state.categories = data.categories || SAMPLE_CATEGORIES;
+        renderCategorySelects(); renderTable(); updateSelectionUI();
+      }).catch(function () {
+        // 离线回退
+        loadLocalData();
+      });
+    } else {
+      loadLocalData();
+    }
+  }
+
+  function loadLocalData() {
     try {
       var termsData = localStorage.getItem(STORAGE_TERMS);
       var categoriesData = localStorage.getItem(STORAGE_CATEGORIES);
       state.terms = termsData ? JSON.parse(termsData) : SAMPLE_TERMS;
       state.categories = categoriesData ? JSON.parse(categoriesData) : SAMPLE_CATEGORIES;
-      // 首次使用时保存示例数据
       if (!termsData) { localStorage.setItem(STORAGE_TERMS, JSON.stringify(state.terms)); }
       if (!categoriesData) { localStorage.setItem(STORAGE_CATEGORIES, JSON.stringify(state.categories)); }
     } catch (e) {
       state.terms = SAMPLE_TERMS;
       state.categories = SAMPLE_CATEGORIES;
     }
+    renderCategorySelects(); renderTable(); updateSelectionUI();
   }
 
   var saveTimer = null;
   function saveTerms() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
-      localStorage.setItem(STORAGE_TERMS, JSON.stringify(state.terms));
-    }, 100);
+      if (authToken) {
+        apiRequest('POST', '/api/terms', { terms: state.terms, categories: state.categories }).catch(function () {
+          localStorage.setItem(STORAGE_TERMS, JSON.stringify(state.terms));
+        });
+      } else {
+        localStorage.setItem(STORAGE_TERMS, JSON.stringify(state.terms));
+      }
+    }, 300);
   }
 
   function saveCategories() {
-    localStorage.setItem(STORAGE_CATEGORIES, JSON.stringify(state.categories));
+    if (authToken) {
+      apiRequest('POST', '/api/terms', { terms: state.terms, categories: state.categories }).catch(function () {
+        localStorage.setItem(STORAGE_CATEGORIES, JSON.stringify(state.categories));
+      });
+    } else {
+      localStorage.setItem(STORAGE_CATEGORIES, JSON.stringify(state.categories));
+    }
   }
 
   // ========== 工具函数 ==========
@@ -780,8 +833,19 @@
     parseInput: parseInput
   };
 
-  // ========== 初始化（无需登录，直接启动） ==========
-  function init() {
+  // ========== 手机验证码登录 ==========
+  var codeCountdown = 0;
+  var codeTimer = null;
+
+  function showLoginPage() {
+    document.getElementById('loginPage').style.display = 'flex';
+    document.getElementById('appContainer').style.display = 'none';
+  }
+
+  function showAppPage() {
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('appContainer').style.display = '';
+    document.getElementById('userName').textContent = displayName || currentUser;
     loadData();
     renderCategorySelects();
     renderTable();
@@ -789,6 +853,104 @@
     bindEvents();
   }
 
-  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); }
-  else { init(); }
+  function handleSendCode() {
+    var phone = document.getElementById('phoneInput').value.trim();
+    var errorEl = document.getElementById('loginError');
+    errorEl.textContent = '';
+    if (!phone || !/^1[3-9]\d{9}$/.test(phone)) { errorEl.textContent = '请输入有效的手机号'; return; }
+    var btn = document.getElementById('sendCodeBtn');
+    btn.disabled = true;
+    apiRequest('POST', '/api/send-code', { phone: phone }).then(function (data) {
+      showToast('验证码已发送', 'success');
+      if (data.code) {
+        document.getElementById('codeInput').value = data.code;
+        showToast('开发模式：验证码 ' + data.code, 'info');
+      }
+      codeCountdown = 60;
+      btn.textContent = codeCountdown + 's';
+      codeTimer = setInterval(function () {
+        codeCountdown--;
+        if (codeCountdown <= 0) { clearInterval(codeTimer); btn.textContent = '获取验证码'; btn.disabled = false; }
+        else { btn.textContent = codeCountdown + 's'; }
+      }, 1000);
+    }).catch(function (err) {
+      errorEl.textContent = err.error || '发送失败';
+      btn.disabled = false;
+    });
+  }
+
+  function handleLogin() {
+    var phone = document.getElementById('phoneInput').value.trim();
+    var code = document.getElementById('codeInput').value.trim();
+    var errorEl = document.getElementById('loginError');
+    errorEl.textContent = '';
+    if (!phone || !/^1[3-9]\d{9}$/.test(phone)) { errorEl.textContent = '请输入有效的手机号'; return; }
+    if (!code || !/^\d{6}$/.test(code)) { errorEl.textContent = '请输入6位验证码'; return; }
+    document.getElementById('loginBtn').disabled = true;
+    apiRequest('POST', '/api/verify-login', { phone: phone, code: code }).then(function (data) {
+      authToken = data.token;
+      currentUser = data.phone;
+      displayName = data.displayName;
+      localStorage.setItem('glossary_token', authToken);
+      localStorage.setItem('glossary_user', currentUser);
+      localStorage.setItem('glossary_displayName', displayName);
+      showToast('登录成功', 'success');
+      showAppPage();
+    }).catch(function (err) {
+      errorEl.textContent = err.error || '登录失败';
+    }).finally(function () {
+      document.getElementById('loginBtn').disabled = false;
+    });
+  }
+
+  function handleLogout() {
+    authToken = ''; currentUser = ''; displayName = '';
+    localStorage.removeItem('glossary_token');
+    localStorage.removeItem('glossary_user');
+    localStorage.removeItem('glossary_displayName');
+    state.terms = []; state.categories = []; state.selectedIds = {};
+    showLoginPage();
+  }
+
+  function bindLoginEvents() {
+    document.getElementById('sendCodeBtn').addEventListener('click', handleSendCode);
+    document.getElementById('loginBtn').addEventListener('click', handleLogin);
+    document.getElementById('codeInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') handleLogin(); });
+    document.getElementById('phoneInput').addEventListener('input', function (e) { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 11); });
+    document.getElementById('codeInput').addEventListener('input', function (e) { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); });
+    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+  }
+
+  function checkAuthAndInit() {
+    bindLoginEvents();
+    if (authToken) {
+      apiRequest('GET', '/api/check-auth').then(function (data) {
+        if (data.authenticated) {
+          currentUser = data.phone || currentUser;
+          displayName = data.displayName || displayName;
+          localStorage.setItem('glossary_user', currentUser);
+          localStorage.setItem('glossary_displayName', displayName);
+          showAppPage();
+        } else {
+          authToken = '';
+          localStorage.removeItem('glossary_token');
+          showLoginPage();
+        }
+      }).catch(function () {
+        // API不可用，回退到本地模式
+        loadLocalData();
+        bindEvents();
+        document.getElementById('loginPage').style.display = 'none';
+        document.getElementById('appContainer').style.display = '';
+        document.getElementById('userBadge').style.display = 'none';
+        document.getElementById('logoutBtn').style.display = 'none';
+      });
+    } else {
+      showLoginPage();
+    }
+  }
+
+  // ========== 初始化 ==========
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', checkAuthAndInit); }
+  else { checkAuthAndInit(); }
 })();

@@ -9,8 +9,37 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
+  <!-- 登录页面 -->
+  <div id="loginPage" class="login-page">
+    <div class="login-card">
+      <div class="login-header">
+        <i class="fas fa-book login-icon"></i>
+        <h1>物流关务术语库</h1>
+        <p>手机号验证登录，数据安全隔离</p>
+      </div>
+      <div class="login-form">
+        <div class="form-group">
+          <label for="phoneInput"><i class="fas fa-mobile-alt"></i> 手机号</label>
+          <input type="tel" id="phoneInput" placeholder="请输入手机号" maxlength="11" autocomplete="tel" />
+        </div>
+        <div class="form-group">
+          <label for="codeInput"><i class="fas fa-shield-alt"></i> 验证码</label>
+          <div class="code-row">
+            <input type="text" id="codeInput" placeholder="6位验证码" maxlength="6" autocomplete="one-time-code" />
+            <button id="sendCodeBtn" class="btn btn-outline btn-code">获取验证码</button>
+          </div>
+        </div>
+        <button id="loginBtn" class="btn btn-primary btn-block"><i class="fas fa-sign-in-alt"></i> 登录</button>
+        <p id="loginError" class="login-error"></p>
+        <div class="login-tip">
+          <i class="fas fa-lock"></i> 首次登录自动注册，同一手机号数据互通
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- 主应用 -->
-  <div id="appContainer" class="app-container">
+  <div id="appContainer" class="app-container" style="display:none">
     <!-- 头部 -->
     <header class="app-header">
       <div class="header-left">
@@ -18,10 +47,12 @@
         <span id="stats" class="stats-text">共 0 条术语 · 0 个分类</span>
       </div>
       <div class="header-right">
+        <span id="userBadge" class="user-badge"><i class="fas fa-user"></i> <span id="userName"></span></span>
         <button id="addCategoryBtn" class="btn btn-outline"><i class="fas fa-tags"></i> 分类管理</button>
         <button id="importBtn" class="btn btn-outline"><i class="fas fa-upload"></i> 导入</button>
         <button id="exportBtn" class="btn btn-outline"><i class="fas fa-download"></i> 导出</button>
         <button id="addTermBtn" class="btn btn-primary"><i class="fas fa-plus"></i> 添加术语</button>
+        <button id="logoutBtn" class="btn btn-outline btn-logout"><i class="fas fa-sign-out-alt"></i> 退出</button>
       </div>
     </header>
 
