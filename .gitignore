@@ -1,0 +1,5 @@
+server/python/
+server/data/
+python.zip
+node_modules/
+.vercel/
