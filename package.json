@@ -1,0 +1,8 @@
+{
+  "name": "glossary-static",
+  "version": "2.0.0",
+  "description": "物流关务术语库 - 纯静态版",
+  "scripts": {
+    "start": "npx serve ."
+  }
+}

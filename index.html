@@ -9,7 +9,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
-  <div class="app-container">
+  <!-- 主应用 -->
+  <div id="appContainer" class="app-container">
     <!-- 头部 -->
     <header class="app-header">
       <div class="header-left">
@@ -18,6 +19,7 @@
       </div>
       <div class="header-right">
         <button id="addCategoryBtn" class="btn btn-outline"><i class="fas fa-tags"></i> 分类管理</button>
+        <button id="importBtn" class="btn btn-outline"><i class="fas fa-upload"></i> 导入</button>
         <button id="exportBtn" class="btn btn-outline"><i class="fas fa-download"></i> 导出</button>
         <button id="addTermBtn" class="btn btn-primary"><i class="fas fa-plus"></i> 添加术语</button>
       </div>
@@ -76,6 +78,12 @@
         <h3 id="modalTitle">添加术语</h3>
         <button id="closeTermModal" class="modal-close"><i class="fas fa-times"></i></button>
       </div>
+      <!-- 输入模式切换 -->
+      <div class="input-mode-switch">
+        <button id="modeFieldBtn" class="mode-btn active" onclick="app.switchInputMode('field')"><i class="fas fa-list"></i> 逐项输入</button>
+        <button id="modeParseBtn" class="mode-btn" onclick="app.switchInputMode('parse')"><i class="fas fa-magic"></i> 整段解析</button>
+      </div>
+      <!-- 逐项输入模式 -->
       <form id="termForm" class="modal-body">
         <input type="hidden" id="termId" />
         <div class="form-group">
@@ -103,6 +111,26 @@
           <textarea id="termDesc" rows="3" placeholder="输入术语的详细解释..."></textarea>
         </div>
       </form>
+      <!-- 整段解析模式 -->
+      <div id="parseMode" class="modal-body" style="display:none">
+        <div class="parse-hint">
+          <i class="fas fa-info-circle"></i>
+          <span>粘贴一段文字，自动识别术语名称、缩写、全拼、分类和解释。支持多种格式：</span>
+        </div>
+        <div class="parse-examples">
+          <div class="parse-example" onclick="app.fillParseExample(1)">格式1：提单；英文缩写：B/L；英文全拼：Bill of Lading；分类：单证；解释：由承运人签发的单据</div>
+          <div class="parse-example" onclick="app.fillParseExample(2)">格式2：提单 B/L Bill of Lading [单证] 由承运人签发的单据</div>
+        </div>
+        <div class="form-group">
+          <label for="parseInput">输入内容</label>
+          <textarea id="parseInput" rows="5" placeholder="例如：提单；英文缩写：B/L；英文全拼：Bill of Lading；分类：单证；解释：由承运人签发的单据"></textarea>
+        </div>
+        <button id="parseBtn" class="btn btn-outline btn-block" onclick="app.parseInput()"><i class="fas fa-magic"></i> 解析并填入</button>
+        <div id="parseResult" class="parse-result" style="display:none">
+          <div class="parse-result-title"><i class="fas fa-check-circle"></i> 解析结果</div>
+          <div id="parseResultContent" class="parse-result-content"></div>
+        </div>
+      </div>
       <div class="modal-footer">
         <button id="cancelTermModal" class="btn btn-outline">取消</button>
         <button id="saveTermModal" class="btn btn-primary">保存</button>
